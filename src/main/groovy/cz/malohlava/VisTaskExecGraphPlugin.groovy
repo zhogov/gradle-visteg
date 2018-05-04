@@ -1,6 +1,7 @@
 package cz.malohlava
 
-import groovy.transform.Memoized
+import java.lang.reflect.Field
+
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.api.execution.TaskExecutionGraph
@@ -9,7 +10,7 @@ import org.gradle.api.logging.Logging
 import org.gradle.execution.taskgraph.TaskExecutionPlan
 import org.gradle.execution.taskgraph.TaskInfo
 
-import java.lang.reflect.Field
+import groovy.transform.Memoized
 
 /**
  * VisTEG
@@ -91,7 +92,6 @@ class VisTaskExecGraphPlugin implements Plugin<Project> {
                 }
                 dotGraph.append("rankdir=${vistegExt.rankdir};$ls")
                 dotGraph.append("splines=${vistegExt.splines};$ls")
-                dotGraph.append("""graph [pad=".1", ranksep="0.9", nodesep="0.15"];$ls""")
                 // Generate graph for each input
                 entryTasks.each { et ->
                     printGraph(vistegExt, dotGraph, ls, et, edges)
@@ -157,10 +157,10 @@ class VisTaskExecGraphPlugin implements Plugin<Project> {
             seen.add(tname)
 
             def tcolor = colorscheme == null ? getRandomColor(tproject) : getSchemeColor(tproject, colorscheme, vistegExt.color)
-            def nodeKind = getDependencyPredecessors(ti).empty ? NodeKind.START
-                    : getDependencySuccessors(ti).empty ? NodeKind.END : NodeKind.INNER
+            def nodeKind = ti.dependencyPredecessors.empty ? NodeKind.START
+                    : ti.dependencySuccessors.empty ? NodeKind.END : NodeKind.INNER
 
-            getDependencySuccessors(ti).each { succ ->
+            ti.dependencySuccessors.each { succ ->
                 def sname = succ.task.path
                 if (edges.add(edgeHash(tname, sname))) {
                     // Generate edge between two nodes
@@ -174,7 +174,7 @@ class VisTaskExecGraphPlugin implements Plugin<Project> {
                 }
             }
             if (vistegExt.includeMustRunAfter) {
-                getMustSuccessors(ti).each { succ ->
+                ti.mustSuccessors.each { succ ->
                     def sname = succ.task.path
                     if (edges.add(edgeHash(tname, sname))) {
                         // Generate edge between two nodes
@@ -189,7 +189,7 @@ class VisTaskExecGraphPlugin implements Plugin<Project> {
                 }
             }
             if (vistegExt.includeShouldRunAfter) {
-                getShouldSuccessors(ti).each { succ ->
+                ti.shouldSuccessors.each { succ ->
                     def sname = succ.task.path
                     if (edges.add(edgeHash(tname, sname))) {
                         // Generate edge between two nodes
@@ -217,43 +217,9 @@ class VisTaskExecGraphPlugin implements Plugin<Project> {
                 sb.append("style=filled,color=$tcolor]")
             }
             sb.append(";").append(ls)
-            q.addAll(getDependencySuccessors(ti))
+            q.addAll(ti.dependencySuccessors)
         }
         sb
-    }
-
-    Closure<TaskInfo> filter = { TaskInfo taskInfo -> taskInfo.task.name.contains("shadowJar") || taskInfo.task.name.contains("jar") }
-
-    TreeSet<TaskInfo> getDependencySuccessors(TaskInfo taskInfo) {
-        filterTasks(taskInfo, { it.getDependencySuccessors() })
-    }
-
-    TreeSet<TaskInfo> getMustSuccessors(TaskInfo taskInfo) {
-        filterTasks(taskInfo, { it.getMustSuccessors() })
-    }
-
-    TreeSet<TaskInfo> getShouldSuccessors(TaskInfo taskInfo) {
-        filterTasks(taskInfo, { it.getShouldSuccessors() })
-    }
-
-    TreeSet<TaskInfo> getDependencyPredecessors(TaskInfo taskInfo) {
-        filterTasks(taskInfo, { it.getDependencyPredecessors() })
-    }
-
-    TreeSet<TaskInfo> filterTasks(TaskInfo taskInfo, Closure<TaskInfo> accessor) {
-        TreeSet<TaskInfo> result = new TreeSet<>()
-
-        Collection<TaskInfo> candidates = accessor.call(taskInfo)
-
-        for (TaskInfo candidate : candidates) {
-            if (filter.call(candidate)) {
-                result.add(candidate)
-            } else {
-                result.addAll(filterTasks(candidate, accessor))
-            }
-        }
-
-        result
     }
 
     @Memoized
@@ -311,7 +277,7 @@ class VisTegPluginExtension {
     /** Shape of end node - see {@link "http://www.graphviz.org/content/node-shapes"} for possible values. */
     String endNodeShape = 'doubleoctagon'
     /** Sets direction of graph layout. {@link "http://www.graphviz.org/doc/info/attrs.html#a:rankdir"}  for possible values.*/
-    String rankdir = 'RL'
+    String rankdir = 'TB'
     /** Controls how, and if, edges are represented. {@link "http://www.graphviz.org/doc/info/attrs.html#a:splines"}  for possible values.*/
     String splines = 'spline'
 }
